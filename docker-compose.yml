@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  healthcheck-api:
+    build:
+      context: .
+      dockerfile: HealthCheck.Api/Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - ASPNETCORE_URLS=http://+:5001
+    networks:
+      - healthcheck-net
+
+  healthcheck-ui:
+    build:
+      context: .
+      dockerfile: HealthCheck.Ui/Dockerfile
+    ports:
+      - "5002:5002"
+    environment:
+      - ASPNETCORE_URLS=http://+:5002
+      - HealthCheckApi__BaseUrl=http://healthcheck-api:5001
+    networks:
+      - healthcheck-net
+    depends_on:
+      - healthcheck-api
+
+networks:
+  healthcheck-net:
+    driver: bridge
