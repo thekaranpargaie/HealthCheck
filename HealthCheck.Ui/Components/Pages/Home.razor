@@ -1,0 +1,214 @@
+﻿@page "/"
+
+@using System.Net.Http.Json
+@using HealthCheck.Main.Models
+
+<PageTitle>Health Dashboard</PageTitle>
+
+<style>
+    .dashboard-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2rem;
+        justify-content: flex-start;
+        margin-top: 2rem;
+    }
+
+    .health-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        padding: 1.5rem 2rem 1rem 2rem;
+        min-width: 320px;
+        max-width: 350px;
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 1rem;
+    }
+
+    .status-pill {
+        display: inline-block;
+        padding: 0.25em 0.9em;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 1em;
+        color: #fff;
+        margin-bottom: 0.5em;
+    }
+
+    .status-healthy {
+        background: #28a745;
+    }
+
+    .status-unhealthy {
+        background: #dc3545;
+    }
+
+    .status-unknown {
+        background: #6c757d;
+    }
+
+    .history-row {
+        display: flex;
+        gap: 0.3em;
+        margin-top: 1.2em;
+        justify-content: flex-start;
+        align-items: center;
+    }
+
+    .history-pill {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        display: inline-block;
+        border: 1px solid #e0e0e0;
+    }
+
+    .pill-healthy {
+        background: #28a745;
+    }
+
+    .pill-unhealthy {
+        background: #dc3545;
+    }
+
+    .pill-missing {
+        background: #d3d3d3;
+    }
+
+    .service-title {
+        font-size: 1.2em;
+        font-weight: 700;
+        margin-bottom: 0.5em;
+    }
+
+    .last-checked {
+        font-size: 0.95em;
+        color: #888;
+        margin-bottom: 0.5em;
+    }
+
+    .description {
+        font-size: 1em;
+        margin-bottom: 0.5em;
+    }
+</style>
+
+<h1 style="margin-bottom:0.5em;">Health Dashboard</h1>
+
+@if (isLoading)
+{
+    <p>Loading health data...</p>
+}
+else if (errorMessage != null)
+{
+    <p class="text-danger">@errorMessage</p>
+}
+else
+{
+    <div class="dashboard-container">
+        @foreach (var group in groupedResults)
+        {
+            var latest = group.Value.LastOrDefault();
+            var statusClass = latest?.IsHealthy == true ? "status-healthy" : "status-unhealthy";
+            var statusText = latest?.IsHealthy == true ? "Healthy" : "Unhealthy";
+            <div class="health-card">
+                <div class="service-title">@group.Key</div>
+                <span class="status-pill @statusClass">@statusText</span>
+                <div class="last-checked">
+                    Last checked: @latest?.Timestamp.ToLocalTime().ToString("g")
+                </div>
+                <div class="description">@latest?.Description</div>
+                <div class="history-row">
+                    @foreach (var pill in GetHistoryPills(group.Value))
+                    {
+                        <span class="history-pill @pill.CssClass" title="@pill.Tooltip"></span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<HealthCheckPingResult> results = new();
+    private Dictionary<string, List<HealthCheckPingResult>> groupedResults = new();
+    private bool isLoading = true;
+    private string? errorMessage;
+    private System.Threading.Timer? timer;
+
+    // 5-min slots for last 24 hours (288 slots)
+    private const int SlotMinutes = 5;
+    private const int SlotCount = 288;
+    private const int PillsToShow = 16; // Number of pills that fit in the card
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        timer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadData();
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        errorMessage = null;
+        try
+        {
+            var http = new HttpClient { BaseAddress = new Uri("http://healthcheck-api:5001/") };
+            results = await http.GetFromJsonAsync<List<HealthCheckPingResult>>("api/healthchecks") ?? new();
+            groupedResults = results
+                .GroupBy(r => r.ServiceKey)
+                .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Timestamp).ToList());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to load health data: " + ex.Message;
+        }
+        isLoading = false;
+    }
+
+    // Helper for pill history
+    private IEnumerable<(string CssClass, string Tooltip)> GetHistoryPills(List<HealthCheckPingResult> pings)
+    {
+        var now = DateTime.UtcNow;
+        var slots = new (DateTime Start, DateTime End)[PillsToShow];
+        for (int i = 0; i < PillsToShow; i++)
+        {
+            var slotStart = now.AddMinutes(-SlotMinutes * (PillsToShow - i));
+            slots[i] = (slotStart, slotStart.AddMinutes(SlotMinutes));
+        }
+
+        foreach (var slot in slots)
+        {
+            var ping = pings.LastOrDefault(p =>
+                p.Timestamp >= slot.Start && p.Timestamp < slot.End);
+
+            if (ping != null)
+            {
+                yield return (
+                    ping.IsHealthy ? "pill-healthy" : "pill-unhealthy",
+                    $"{slot.Start.ToLocalTime():g} - {(ping.IsHealthy ? "Healthy" : "Unhealthy")}"
+                );
+            }
+            else
+            {
+                yield return (
+                    "pill-missing",
+                    $"{slot.Start.ToLocalTime():g} - No data"
+                );
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+    }
+}
