@@ -9,7 +9,7 @@ namespace HealthCheck.Main.Services
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<ScheduledHealthCheckService> _logger;
-        private readonly TimeSpan _interval = TimeSpan.FromMinutes(5);
+        private readonly TimeSpan _interval = TimeSpan.FromMinutes(1);
 
         public ScheduledHealthCheckService(IServiceProvider serviceProvider, ILogger<ScheduledHealthCheckService> logger)
         {

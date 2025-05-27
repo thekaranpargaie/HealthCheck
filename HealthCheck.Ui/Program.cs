@@ -11,7 +11,9 @@ namespace HealthCheck.Ui
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
-            builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri("http://healthcheck-api:5001/") }); // Use your API base URL
+            // Read from environment variables (like HealthCheckApi__BaseUrl)
+            var apiBaseUrl = builder.Configuration["HealthCheckApi:BaseUrl"] ?? throw new InvalidOperationException();
+            builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 
             var app = builder.Build();
 

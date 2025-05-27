@@ -1,5 +1,6 @@
 ﻿@page "/"
-
+@rendermode InteractiveServer
+@implements IDisposable
 @using System.Net.Http.Json
 @using HealthCheck.Main.Models
 
@@ -28,10 +29,10 @@
 
     .status-pill {
         display: inline-block;
-        padding: 0.25em 0.9em;
-        border-radius: 999px;
+        padding: 0.3em 0.8em;
+        border-radius: 6px; /* rectangular rounded corner */
         font-weight: 600;
-        font-size: 1em;
+        font-size: 0.95em;
         color: #fff;
         margin-bottom: 0.5em;
     }
@@ -50,16 +51,16 @@
 
     .history-row {
         display: flex;
-        gap: 0.3em;
+        gap: 0.4em;
         margin-top: 1.2em;
         justify-content: flex-start;
         align-items: center;
     }
 
     .history-pill {
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        border-radius: 4px; /* square with slightly rounded corners */
         display: inline-block;
         border: 1px solid #e0e0e0;
     }
@@ -92,9 +93,50 @@
         font-size: 1em;
         margin-bottom: 0.5em;
     }
+
+    .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .countdown-circle {
+        background-color: #007bff;
+        color: white;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-weight: bold;
+        font-size: 1rem;
+        animation: pulse 1s infinite;
+    }
+
+    @@keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7);
+        }
+
+        70% {
+            box-shadow: 0 0 0 10px rgba(0, 123, 255, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(0, 123, 255, 0);
+        }
+    }
 </style>
 
-<h1 style="margin-bottom:0.5em;">Health Dashboard</h1>
+
+<div class="top-bar">
+    <h1 style="margin-bottom: 0;">Health Dashboard</h1>
+    <div class="countdown-circle" title="Next update in @secondsRemaining seconds">
+        @secondsRemaining
+    </div>
+</div>
 
 @if (isLoading)
 {
@@ -135,24 +177,50 @@ else
     private Dictionary<string, List<HealthCheckPingResult>> groupedResults = new();
     private bool isLoading = true;
     private string? errorMessage;
-    private System.Threading.Timer? timer;
-
-    // 5-min slots for last 24 hours (288 slots)
-    private const int SlotMinutes = 5;
-    private const int SlotCount = 288;
-    private const int PillsToShow = 16; // Number of pills that fit in the card
+    private CancellationTokenSource _cts = new();
+    private int secondsRemaining = 60;
+    private System.Threading.Timer? countdownTimer;
+    private const int PillsToShow = 24;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadData();
-        timer = new System.Threading.Timer(async _ =>
+        countdownTimer = StartCountdownTimer(); // ✅ FIXED
+        _ = RunPeriodicUpdate(_cts.Token);
+    }
+
+    private System.Threading.Timer StartCountdownTimer()
+    {
+        return new System.Threading.Timer(_ =>
         {
-            await InvokeAsync(async () =>
+            if (secondsRemaining > 0)
+                secondsRemaining--;
+            else
+                secondsRemaining = 60;
+
+            InvokeAsync(StateHasChanged);
+        }, null, 0, 1000);
+    }
+
+    private async Task RunPeriodicUpdate(CancellationToken token)
+    {
+        var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
             {
-                await LoadData();
-                StateHasChanged();
-            });
-        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+                await InvokeAsync(async () =>
+                {
+                    await LoadData();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Gracefully handle cancellation
+        }
     }
 
     private async Task LoadData()
@@ -174,41 +242,34 @@ else
         isLoading = false;
     }
 
-    // Helper for pill history
     private IEnumerable<(string CssClass, string Tooltip)> GetHistoryPills(List<HealthCheckPingResult> pings)
     {
-        var now = DateTime.UtcNow;
-        var slots = new (DateTime Start, DateTime End)[PillsToShow];
-        for (int i = 0; i < PillsToShow; i++)
+        var recent = pings
+            .OrderByDescending(p => p.Timestamp)
+            .Take(PillsToShow)
+            .OrderBy(p => p.Timestamp)
+            .ToList();
+
+        int missing = PillsToShow - recent.Count;
+
+        for (int i = 0; i < missing; i++)
         {
-            var slotStart = now.AddMinutes(-SlotMinutes * (PillsToShow - i));
-            slots[i] = (slotStart, slotStart.AddMinutes(SlotMinutes));
+            yield return ("pill-missing", "No data");
         }
 
-        foreach (var slot in slots)
+        foreach (var ping in recent)
         {
-            var ping = pings.LastOrDefault(p =>
-                p.Timestamp >= slot.Start && p.Timestamp < slot.End);
-
-            if (ping != null)
-            {
-                yield return (
-                    ping.IsHealthy ? "pill-healthy" : "pill-unhealthy",
-                    $"{slot.Start.ToLocalTime():g} - {(ping.IsHealthy ? "Healthy" : "Unhealthy")}"
-                );
-            }
-            else
-            {
-                yield return (
-                    "pill-missing",
-                    $"{slot.Start.ToLocalTime():g} - No data"
-                );
-            }
+            yield return (
+                ping.IsHealthy ? "pill-healthy" : "pill-unhealthy",
+                $"{ping.Timestamp.ToLocalTime():g} - {(ping.IsHealthy ? "Healthy" : "Unhealthy")}"
+            );
         }
     }
 
     public void Dispose()
     {
-        timer?.Dispose();
+        _cts.Cancel();
+        _cts.Dispose();
+        countdownTimer?.Dispose();
     }
 }

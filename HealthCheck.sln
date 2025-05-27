@@ -3,11 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36025.13
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HealthCheck.Main", "HealthCheck.Main\HealthCheck.Main.csproj", "{ABEBD44B-23DB-4704-81F9-EA292DB0F692}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HealthCheck.Main", "HealthCheck.Main\HealthCheck.Main.csproj", "{ABEBD44B-23DB-4704-81F9-EA292DB0F692}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HealthCheck.Api", "HealthCheck.Api\HealthCheck.Api.csproj", "{63452D73-E3D6-43DC-B290-C76EC4B57856}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HealthCheck.Api", "HealthCheck.Api\HealthCheck.Api.csproj", "{63452D73-E3D6-43DC-B290-C76EC4B57856}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HealthCheck.Ui", "HealthCheck.Ui\HealthCheck.Ui.csproj", "{E6BC0E2A-C428-4BA7-984F-F382F93DE402}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HealthCheck.Ui", "HealthCheck.Ui\HealthCheck.Ui.csproj", "{E6BC0E2A-C428-4BA7-984F-F382F93DE402}"
 EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{771CF4CA-34B7-4F6F-96BB-B2D690374C37}"
 EndProject
